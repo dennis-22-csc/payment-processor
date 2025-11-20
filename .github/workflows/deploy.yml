@@ -40,6 +40,20 @@ jobs:
           NODE_ENV: production
         run: |
           npm install --production
+          
+      # 1. First SSH to create directory with sudo
+      - name: Create deployment directory on server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            echo "Creating deployment directory..."
+            sudo mkdir -p /var/www/express-api/
+            sudo chown -R ${{ secrets.GCP_USER }}:www-data /var/www/express-api/
+            sudo chmod -R 755 /var/www/express-api/
+            echo "Directory created successfully"
 
       # 3. Copy files to server
       - name: Copy files to server
@@ -66,10 +80,6 @@ jobs:
             
             DEPLOY_PATH="/var/www/express-api/"
             SERVICE_NAME="payment-processor"
-            
-            # 0. Create deployment directory if it doesn't exist
-            echo "Creating deployment directory: ${DEPLOY_PATH}"
-            sudo mkdir -p ${DEPLOY_PATH}
             
             # 1. Set correct file permissions
             echo "Setting ownership and permissions on ${DEPLOY_PATH}..."
