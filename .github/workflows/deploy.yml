@@ -89,11 +89,11 @@ jobs:
             # 2. Create environment file
             echo "Creating environment configuration..."
             sudo tee "${DEPLOY_PATH}.env" > /dev/null <<'ENVFILE'
-NODE_ENV=production
-PORT=3000
-PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-FRONTEND_URL=${{ secrets.FRONTEND_URL }}
-ENVFILE
+            NODE_ENV=production
+            PORT=3000
+            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            ENVFILE
             
             sudo chown ${{ secrets.GCP_USER }}:www-data "${DEPLOY_PATH}.env"
             sudo chmod 600 "${DEPLOY_PATH}.env"
@@ -106,23 +106,23 @@ ENVFILE
             # 4. Setup systemd service
             echo "Setting up systemd service..."
             sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<'SERVICEFILE'
-[Unit]
-Description=Payment Processing API Service
-After=network.target
+            [Unit]
+            Description=Payment Processing API Service
+            After=network.target
 
-[Service]
-Type=simple
-User=${{ secrets.GCP_USER }}
-WorkingDirectory=${DEPLOY_PATH}
-Environment=NODE_ENV=production
-Environment=PATH=/usr/bin:/usr/local/bin
-ExecStart=/usr/bin/npm start
-Restart=on-failure
-RestartSec=10
+            [Service]
+            Type=simple
+            User=${{ secrets.GCP_USER }}
+            WorkingDirectory=${DEPLOY_PATH}
+            Environment=NODE_ENV=production
+            Environment=PATH=/usr/bin:/usr/local/bin
+            ExecStart=/usr/bin/npm start
+            Restart=on-failure
+            RestartSec=10
 
-[Install]
-WantedBy=multi-user.target
-SERVICEFILE
+            [Install]
+            WantedBy=multi-user.target
+            SERVICEFILE
             
             # 5. Setup Nginx configuration
             echo "Setting up Nginx configuration..."
