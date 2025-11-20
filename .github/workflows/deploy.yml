@@ -133,7 +133,7 @@ jobs:
                 
                 location  /api/ {
                     # Handle OPTIONS requests specifically
-                    if ($request_method = 'OPTIONS') {
+                    if (\$request_method = OPTIONS) {
                         add_header 'Access-Control-Allow-Origin' 'http://0.0.0.0:8000' always;
                         add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
                         add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization, X-Requested-With' always;
