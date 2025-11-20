@@ -26,7 +26,7 @@ function logTransactionUpdate(reference, updates) {
 }
 
 // --- Routes ---
-app.post('/api/payments/initialize', async (req, res) => {
+app.post('/payments/initialize', async (req, res) => {
     try {
         console.log('--- Frontend Payload Received ---');
         console.log(req.body);
@@ -166,7 +166,7 @@ app.post('/api/payments/initialize', async (req, res) => {
 });
 
 // Verification endpoint using direct API approach
-app.get('/api/payments/verify/:reference', async (req, res) => {
+app.get('/payments/verify/:reference', async (req, res) => {
     try {
         const { reference } = req.params;
 
@@ -247,7 +247,7 @@ app.get('/api/payments/verify/:reference', async (req, res) => {
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
     res.json({
         success: true,
         message: 'Server is running',
