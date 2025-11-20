@@ -41,16 +41,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// --- FIX START ---
-/**
- * FIX: Explicitly handle the OPTIONS preflight request for the payment initialization route.
- * Nginx strips the '/api/' prefix, so this must match the path Express receives: '/payments/initialize'.
- * The 'cors' middleware (app.use(cors(corsOptions))) will handle setting the required headers.
- */
+// 💡 FIX: Explicitly handle the OPTIONS preflight request.
+// The Nginx proxy forwards the path as /payments/initialize to Express.
 app.options('/payments/initialize', (req, res) => {
+    // The 'cors' middleware has already run and set the necessary headers.
+    // We just need to send a 200 OK status.
     res.sendStatus(200);
 });
-// --- FIX END ---
+// ------------------------------------------------------------
 
 
 function logTransactionStorage(transaction) {
@@ -293,15 +291,15 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Root endpoint
+// Root endpoint (Updated to reflect no /api/ prefix in Express)
 app.get('/', (req, res) => {
     res.json({
         message: 'Paystack Payment Server',
         version: '1.0.0',
         endpoints: {
-            initialize: 'POST /payments/initialize', // Changed from /api/payments/initialize to match what Express actually receives
-            verify: 'GET /payments/verify/:reference', // Changed from /api/payments/verify/:reference
-            health: 'GET /health' // Changed from /api/health
+            initialize: 'POST /payments/initialize',
+            verify: 'GET /payments/verify/:reference',
+            health: 'GET /health'
         }
     });
 });
