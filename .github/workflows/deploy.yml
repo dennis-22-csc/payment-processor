@@ -41,7 +41,7 @@ jobs:
         run: |
           npm install --production
           
-      # 1. First SSH to create directory with sudo
+      # Create deployment directory on server
       - name: Create deployment directory on server
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -55,7 +55,7 @@ jobs:
             sudo chmod -R 755 /var/www/express-api/
             echo "Directory created successfully"
 
-      # 3. Copy files to server
+      # Copy files to server
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -67,7 +67,7 @@ jobs:
           exclude: ".git, .github, node_modules, *.log"
           overwrite: true
 
-      # 4. SSH into server & deploy
+      # SSH into server & deploy
       - name: SSH into server & deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -89,10 +89,10 @@ jobs:
             # 2. Create environment file
             echo "Creating environment configuration..."
             sudo tee "${DEPLOY_PATH}.env" > /dev/null <<'ENVFILE'
-            NODE_ENV=production
-            PORT=3000
-            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+NODE_ENV=production
+PORT=3000
+PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+FRONTEND_URL=${{ secrets.FRONTEND_URL }}
 ENVFILE
             
             sudo chown ${{ secrets.GCP_USER }}:www-data "${DEPLOY_PATH}.env"
@@ -106,22 +106,22 @@ ENVFILE
             # 4. Setup systemd service
             echo "Setting up systemd service..."
             sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<'SERVICEFILE'
-            [Unit]
-            Description=Payment Processing API Service
-            After=network.target
-            
-            [Service]
-            Type=simple
-            User=${{ secrets.GCP_USER }}
-            WorkingDirectory=${DEPLOY_PATH}
-            Environment=NODE_ENV=production
-            Environment=PATH=/usr/bin:/usr/local/bin
-            ExecStart=/usr/bin/npm start
-            Restart=on-failure
-            RestartSec=10
-            
-            [Install]
-            WantedBy=multi-user.target
+[Unit]
+Description=Payment Processing API Service
+After=network.target
+
+[Service]
+Type=simple
+User=${{ secrets.GCP_USER }}
+WorkingDirectory=${DEPLOY_PATH}
+Environment=NODE_ENV=production
+Environment=PATH=/usr/bin:/usr/local/bin
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
 SERVICEFILE
             
             # 5. Setup Nginx configuration
