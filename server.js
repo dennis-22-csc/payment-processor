@@ -11,6 +11,31 @@ console.log('Loaded Frontend URL:', process.env.FRONTEND_URL ? process.env.FRONT
 const app = express();
 const port = process.env.PORT || 3000;
 
+// CORS Configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or file://)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      process.env.FRONTEND_URL
+    ].filter(Boolean); // Remove any undefined values
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked for origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+
 // Middleware
 app.use(cors());
 app.use(express.json());
