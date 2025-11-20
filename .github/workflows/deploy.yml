@@ -102,84 +102,10 @@ jobs:
             echo "Installing production dependencies..."
             cd ${DEPLOY_PATH}
             npm install --production --no-audit --no-fund
+           
+            sudo systemctl daemon-reload
+            sudo systemctl enable ${SERVICE_NAME}
+            sudo systemctl restart ${SERVICE_NAME}
+            sudo systemctl reload nginx
+            echo "Deployment to ${DEPLOY_PATH} completed successfully! Express.js API is live."
             
-            # 4. Setup systemd service
-            echo "Setting up systemd service..."
-            sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<'SERVICEFILE'
-            [Unit]
-            Description=Payment Processing API Service
-            After=network.target
-
-            [Service]
-            Type=simple
-            User=${{ secrets.GCP_USER }}
-            WorkingDirectory=${DEPLOY_PATH}
-            Environment=NODE_ENV=production
-            Environment=PATH=/usr/bin:/usr/local/bin
-            ExecStart=/usr/bin/npm start
-            Restart=on-failure
-            RestartSec=10
-
-            [Install]
-            WantedBy=multi-user.target
-            SERVICEFILE
-            
-            # 5. Setup Nginx configuration
-            echo "Setting up Nginx configuration..."
-            sudo tee /etc/nginx/sites-available/${SERVICE_NAME} > /dev/null <<'NGINXFILE'
-server {
-    server_name api.thekingstutor.com;
-    
-    location  / {
-        proxy_pass http://localhost:3000/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-
-    listen 443 ssl; # managed by Certbot
-    ssl_certificate /etc/letsencrypt/live/api.thekingstutor.com/fullchain.pem; # managed by Certbot
-    ssl_certificate_key /etc/letsencrypt/live/api.thekingstutor.com/privkey.pem; # managed by Certbot
-    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
-
-}
-server {
-    if ($host = api.thekingstutor.com) {
-        return 301 https://$host$request_uri;
-    } # managed by Certbot
-
-    listen 80;
-    server_name api.thekingstutor.com;
-    return 404; # managed by Certbot
-}
-NGINXFILE
-            
-            # Enable site if not already enabled
-            if [ ! -f /etc/nginx/sites-enabled/${SERVICE_NAME} ]; then
-              sudo ln -s /etc/nginx/sites-available/${SERVICE_NAME} /etc/nginx/sites-enabled/
-            fi
-            
-            # 6. Test Nginx configuration
-            echo "Testing Nginx configuration..."
-            sudo nginx -t
-            
-            if [ $? -eq 0 ]; then
-                echo "Nginx config test passed. Proceeding with service deployment."
-                
-                # 7. Reload and restart services
-                sudo systemctl daemon-reload
-                sudo systemctl enable ${SERVICE_NAME}
-                sudo systemctl restart ${SERVICE_NAME}
-                sudo systemctl reload nginx
-                
-                echo "Deployment to ${DEPLOY_PATH} completed successfully! Express.js API is live."
-            else
-                echo "Nginx configuration test FAILED. Services not restarted."
-                exit 1
-            fi
