@@ -67,6 +67,10 @@ jobs:
             DEPLOY_PATH="/var/www/express-api/"
             SERVICE_NAME="payment-processor"
             
+            # 0. Create deployment directory if it doesn't exist
+            echo "Creating deployment directory: ${DEPLOY_PATH}"
+            sudo mkdir -p ${DEPLOY_PATH}
+            
             # 1. Set correct file permissions
             echo "Setting ownership and permissions on ${DEPLOY_PATH}..."
             sudo chown -R ${{ secrets.GCP_USER }}:www-data ${DEPLOY_PATH}
