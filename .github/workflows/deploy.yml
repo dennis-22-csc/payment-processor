@@ -88,12 +88,12 @@ jobs:
             
             # 2. Create environment file
             echo "Creating environment configuration..."
-            sudo tee "${DEPLOY_PATH}.env" > /dev/null <<EOF
+            sudo tee "${DEPLOY_PATH}.env" > /dev/null <<'ENVFILE'
             NODE_ENV=production
             PORT=3000
             PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             FRONTEND_URL=${{ secrets.FRONTEND_URL }}
-            EOF
+ENVFILE
             
             sudo chown ${{ secrets.GCP_USER }}:www-data "${DEPLOY_PATH}.env"
             sudo chmod 600 "${DEPLOY_PATH}.env"
@@ -105,7 +105,7 @@ jobs:
             
             # 4. Setup systemd service
             echo "Setting up systemd service..."
-            sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
+            sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<'SERVICEFILE'
             [Unit]
             Description=Payment Processing API Service
             After=network.target
@@ -122,24 +122,24 @@ jobs:
             
             [Install]
             WantedBy=multi-user.target
-            EOF
+SERVICEFILE
             
             # 5. Setup Nginx configuration
             echo "Setting up Nginx configuration..."
-            sudo tee /etc/nginx/sites-available/${SERVICE_NAME} > /dev/null <<EOF
+            sudo tee /etc/nginx/sites-available/${SERVICE_NAME} > /dev/null <<'NGINXFILE'
 server {
     server_name api.thekingstutor.com;
     
     location  / {
         proxy_pass http://localhost:3000/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
     }
 
     listen 443 ssl; # managed by Certbot
@@ -150,18 +150,15 @@ server {
 
 }
 server {
-    if (\$host = api.thekingstutor.com) {
-        return 301 https://\$host\$request_uri;
+    if ($host = api.thekingstutor.com) {
+        return 301 https://$host$request_uri;
     } # managed by Certbot
-
 
     listen 80;
     server_name api.thekingstutor.com;
     return 404; # managed by Certbot
-
-
 }
-EOF
+NGINXFILE
             
             # Enable site if not already enabled
             if [ ! -f /etc/nginx/sites-enabled/${SERVICE_NAME} ]; then
@@ -172,7 +169,7 @@ EOF
             echo "Testing Nginx configuration..."
             sudo nginx -t
             
-            if [ \$? -eq 0 ]; then
+            if [ $? -eq 0 ]; then
                 echo "Nginx config test passed. Proceeding with service deployment."
                 
                 # 7. Reload and restart services
