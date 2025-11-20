@@ -1,0 +1,156 @@
+name: Deploy Express API to Google Cloud
+
+on:
+  push:
+    branches:
+      - master
+  
+  workflow_dispatch:
+    inputs:
+      deployment_target: 
+        description: 'The environment to deploy to (e.g., production, staging)'
+        required: true
+        default: 'production'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Determine & Log Deployment Target
+      - name: Determine Target & Log
+        run: |
+          TARGET="${{ github.event.inputs.deployment_target || 'master-push' }}"
+          echo "DEPLOY_TARGET=$TARGET" >> $GITHUB_ENV
+          echo "Starting deployment to target: $TARGET"
+
+      # 1. Setup Node.js Environment
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: 'npm'
+
+      # 2. Install production dependencies
+      - name: Install dependencies
+        env:
+          NODE_ENV: production
+        run: |
+          npm install --production
+
+      # 3. Copy files to server
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          source: "./"
+          target: "/var/www/express-api/"
+          exclude: ".git, .github, node_modules, *.log"
+          overwrite: true
+
+      # 4. SSH into server & deploy
+      - name: SSH into server & deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            set -e
+            echo "Starting Express.js API deployment process to target: ${{ env.DEPLOY_TARGET }}"
+            
+            DEPLOY_PATH="/var/www/express-api/"
+            SERVICE_NAME="payment-processor"
+            
+            # 1. Set correct file permissions
+            echo "Setting ownership and permissions on ${DEPLOY_PATH}..."
+            sudo chown -R ${{ secrets.GCP_USER }}:www-data ${DEPLOY_PATH}
+            sudo chmod -R 755 ${DEPLOY_PATH}
+            
+            # 2. Create environment file
+            echo "Creating environment configuration..."
+            sudo tee "${DEPLOY_PATH}.env" > /dev/null <<EOF
+            NODE_ENV=production
+            PORT=3000
+            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            EOF
+            
+            sudo chown ${{ secrets.GCP_USER }}:www-data "${DEPLOY_PATH}.env"
+            sudo chmod 600 "${DEPLOY_PATH}.env"
+            
+            # 3. Install production dependencies on server
+            echo "Installing production dependencies..."
+            cd ${DEPLOY_PATH}
+            npm install --production --no-audit --no-fund
+            
+            # 4. Setup systemd service
+            echo "Setting up systemd service..."
+            sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
+            [Unit]
+            Description=Payment Processing API Service
+            After=network.target
+            
+            [Service]
+            Type=simple
+            User=${{ secrets.GCP_USER }}
+            WorkingDirectory=${DEPLOY_PATH}
+            Environment=NODE_ENV=production
+            Environment=PATH=/usr/bin:/usr/local/bin
+            ExecStart=/usr/bin/npm start
+            Restart=on-failure
+            RestartSec=10
+            
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+            
+            # 5. Setup Nginx configuration
+            echo "Setting up Nginx configuration..."
+            sudo tee /etc/nginx/sites-available/${SERVICE_NAME} > /dev/null <<EOF
+            server {
+                listen 80;
+                server_name royalscholars.thekingstutor.com;
+                
+                location  /api/ {
+                    proxy_pass http://localhost:3000;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+            }
+            EOF
+            
+            # Enable site if not already enabled
+            if [ ! -f /etc/nginx/sites-enabled/${SERVICE_NAME} ]; then
+              sudo ln -s /etc/nginx/sites-available/${SERVICE_NAME} /etc/nginx/sites-enabled/
+            fi
+            
+            # 6. Test Nginx configuration
+            echo "Testing Nginx configuration..."
+            sudo nginx -t
+            
+            if [ $? -eq 0 ]; then
+                echo "Nginx config test passed. Proceeding with service deployment."
+                
+                # 7. Reload and restart services
+                sudo systemctl daemon-reload
+                sudo systemctl enable ${SERVICE_NAME}
+                sudo systemctl restart ${SERVICE_NAME}
+                sudo systemctl reload nginx
+                
+                echo "Deployment to ${DEPLOY_PATH} completed successfully! Express.js API is live."
+            else
+                echo "Nginx configuration test FAILED. Services not restarted."
+                exit 1
+            fi
