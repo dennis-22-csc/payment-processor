@@ -98,6 +98,7 @@ jobs:
             PORT=3000
             PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             ADMIN_PHONE=${{ secrets.ADMIN_PHONE }}
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
             ENVFILE
             
             sudo chown ${{ secrets.GCP_USER }}:www-data "${DEPLOY_PATH}.env"
