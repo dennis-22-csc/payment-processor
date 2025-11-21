@@ -35,6 +35,17 @@ class NotificationService {
         
         const emoji = statusEmoji[paymentStatus] || '⚪';
         
+        const watTime = new Date().toLocaleString('en-US', {
+            timeZone: 'Africa/Lagos',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+        
         return `
 ${emoji} *Payment ${paymentStatus.toUpperCase()}*
 
@@ -45,17 +56,9 @@ ${emoji} *Payment ${paymentStatus.toUpperCase()}*
 *Phone:* ${transaction.phone || 'N/A'}
 *Donation Type:* ${transaction.donationType || 'One-time'}
 
-*Time:* ${new Date().toLocaleString('en-US', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-})} (WAT)
+*Time:* ${watTime} (WAT)
 `.trim();
+    }
 
     async sendWhatsAppNotification(phoneNumber, message) {
         try {
@@ -83,8 +86,6 @@ ${emoji} *Payment ${paymentStatus.toUpperCase()}*
             return false;
         }
     }
-
-   
 }
 
 module.exports = new NotificationService();
