@@ -5,7 +5,7 @@ const fs = require('fs');
 class Database {
     constructor() {
         // Database file path outside project directory
-        const dbDir = '/home/dennis/data/payment_processor/');
+        const dbDir = '/home/dennis/data/payment_processor/';
         const dbFile = path.join(dbDir, 'payments.db');
         
         // Ensure directory exists
