@@ -3,7 +3,7 @@ const axios = require('axios');
 class NotificationService {
     constructor() {
         this.adminPhone = process.env.ADMIN_PHONE;
-        this.whatsappSenderUrl = "http://localhost:3001/send-whatsapp-otp";
+        this.whatsappSenderUrl = "http://localhost:3001/send-whatsapp-message";
     }
 
     async notifyAdmin(transaction, paymentStatus) {
