@@ -41,11 +41,35 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
+
+// Handle preflight requests globally
+app.options('*', cors(corsOptions));
+
+// Add CORS headers to all responses
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000', 
+    'http://0.0.0.0:8000',
+    process.env.FRONTEND_URL
+  ].filter(Boolean);
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  next();
+});
+
 app.use(express.json());
 
-app.options('/payments/initialize', (req, res) => {
-  res.sendStatus(200);
+app.options('/payments/initialize', cors(corsOptions), (req, res) => {
+  res.status(200).send();
 });
+
 
 // --- Routes ---
 app.post('/payments/initialize', async (req, res) => {
