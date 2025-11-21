@@ -9,6 +9,7 @@ const notificationService = require('./notifications/notificationService');
 
 // Log status of key loading (Keep for debugging)
 console.log('Loaded Secret Key:', process.env.PAYSTACK_SECRET_KEY ? 'Key Found' : 'Key Missing');
+console.log('Loaded Frontend URL:', process.env.FRONTEND_URL ? process.env.FRONTEND_URL : 'MISSING');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,8 +24,7 @@ const corsOptions = {
       'http://localhost:8000',
       'http://127.0.0.1:8000',
       'http://0.0.0.0:8000',
-      'https://royalscholars.thekingstutor.com', // Explicitly add this
-      'https://royalscholars.thekingstutor.com/' // With trailing slash
+      process.env.FRONTEND_URL
     ].filter(Boolean); // Remove any undefined values
 
     if (allowedOrigins.indexOf(origin) !== -1) {
