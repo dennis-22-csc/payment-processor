@@ -86,6 +86,11 @@ jobs:
             sudo chown -R ${{ secrets.GCP_USER }}:www-data ${DEPLOY_PATH}
             sudo chmod -R 755 ${DEPLOY_PATH}
             
+            # 2. Install build tools
+            echo "Installing build essentials..."
+            sudo apt update
+            sudo apt install -y build-essential python3
+            
             # 2. Create environment file
             echo "Creating environment configuration..."
             sudo tee "${DEPLOY_PATH}.env" > /dev/null <<'ENVFILE'
@@ -101,7 +106,7 @@ jobs:
             # 3. Install production dependencies on server
             echo "Installing production dependencies..."
             cd ${DEPLOY_PATH}
-            npm install --production --no-audit --no-fund
+            npm install --production --build-from-source --no-audit --no-fund
            
             sudo systemctl daemon-reload
             sudo systemctl enable ${SERVICE_NAME}
