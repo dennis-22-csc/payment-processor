@@ -106,7 +106,9 @@ jobs:
             # 3. Install production dependencies on server
             echo "Installing production dependencies..."
             cd ${DEPLOY_PATH}
-            npm install --production --build-from-source --no-audit --no-fund
+            # Force prebuilt binaries for sqlite3
+            npm install sqlite3 --build-from-source --fallback-to-build
+            npm install --production --no-audit --no-fund
            
             sudo systemctl daemon-reload
             sudo systemctl enable ${SERVICE_NAME}
