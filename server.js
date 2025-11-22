@@ -117,7 +117,7 @@ app.post('/payments/initialize', async (req, res) => {
             reference: reference,
             currency: 'NGN',
             // 💡 CALLBACK URL: Where Paystack redirects the USER (browser)
-            callback_url: `${process.env.FRONTEND_URL}/payment-callback`, 
+            callback_url: `${process.env.FRONTEND_URL}`, 
             metadata: JSON.stringify(fullMetadata)
             // Note: Paystack webhooks are configured globally on the dashboard,
             // but for security, some developers prefer to use the channel metadata 
