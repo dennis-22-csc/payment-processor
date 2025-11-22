@@ -98,7 +98,8 @@ jobs:
             PORT=3000
             PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             ADMIN_PHONE=${{ secrets.ADMIN_PHONE }}
-            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            FRONTEND_URL=https://royalscholars.thekingstutor.com
+            BACKEND_URL=https://api.thekingstutor.com
             ENVFILE
             
             sudo chown ${{ secrets.GCP_USER }}:www-data "${DEPLOY_PATH}.env"
