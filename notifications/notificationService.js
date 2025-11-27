@@ -46,9 +46,9 @@ class NotificationService {
             hour12: true
         });
 
-        // Extract name from transaction - handle both database field names
-        const firstName = transaction.first_name || '';
-        const lastName = transaction.last_name || '';
+        // Extract name from transaction - handle both object properties and database fields
+        const firstName = transaction.first_name || transaction.firstName || '';
+        const lastName = transaction.last_name || transaction.lastName || '';
         const fullName = `${firstName} ${lastName}`.trim();
         
         // Extract USD amount from metadata
@@ -64,28 +64,28 @@ class NotificationService {
             }
         }
 
-        // Format the message with USD amount
+        // Format the message with proper line breaks and bold formatting
         let message = `
 ${emoji} *Payment ${paymentStatus.toUpperCase()}*
 
 *Reference:* ${transaction.reference}
 *Amount:* ₦${transaction.amount}`;
 
-        // Add USD amount if available
+        // Add USD amount if available - on the same line as NGN amount
         if (originalAmountUSD > 0) {
             message += ` ($${originalAmountUSD})`;
         }
 
+        // Continue with proper line breaks for other fields
         message += `
 *Email:* ${transaction.email}
 *Name:* ${fullName || 'N/A'}
 *Phone:* ${transaction.phone || 'N/A'}
-*Donation Type:* ${transaction.donation_type || 'One-time'}
+*Donation Type:* ${transaction.donation_type || transaction.donationType || 'One-time'}
 
-*Time:* ${watTime} (WAT)
-`.trim();
+*Time:* ${watTime} (WAT)`;
 
-        return message;
+        return message.trim();
     }
 
     async sendWhatsAppNotification(phoneNumber, message) {

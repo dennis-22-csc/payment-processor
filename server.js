@@ -62,7 +62,10 @@ app.options('/payments/initialize', (req, res) => {
 app.post('/payments/initialize', async (req, res) => {
     try {
         console.log('--- Frontend Payload Received ---');
-        console.log(req.body);
+        console.log('Full body:', req.body);
+        console.log('First Name:', req.body.firstName);
+        console.log('Last Name:', req.body.lastName);
+        console.log('Email:', req.body.email);
         console.log('-----------------------------------');
 
         const { amount, email, firstName, lastName, phone, frequency, metadata } = req.body;
@@ -148,7 +151,7 @@ app.post('/payments/initialize', async (req, res) => {
 
         // Check if Paystack API call was successful
         if (paystackResponse.data.status === true) {
-            // 5. Store transaction in database - names go in dedicated columns, USD in metadata
+            // 5. Store transaction in database - ensure names are properly stored
             const transactionData = {
                 reference: reference,
                 amount: amount,
@@ -157,9 +160,14 @@ app.post('/payments/initialize', async (req, res) => {
                 lastName: lastName || '',
                 phone: phone || '',
                 donationType: frequency,
-                metadata: fullMetadata, // This includes originalAmountUSD
+                metadata: fullMetadata,
                 status: 'initiated'
             };
+
+            console.log('--- Storing Transaction in Database ---');
+            console.log('First Name:', transactionData.firstName);
+            console.log('Last Name:', transactionData.lastName);
+            console.log('----------------------------------------');
 
             await database.logTransaction(transactionData);
 
