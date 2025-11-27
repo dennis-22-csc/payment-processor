@@ -1,14 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const crypto = require('crypto'); // Built-in Node.js module for security checks
+const crypto = require('crypto');
 require('dotenv').config();
 
 // Import modules
 const database = require('./db/database');
 const notificationService = require('./notifications/notificationService');
 
-// Log status of key loading (Keep for debugging)
+// Log status of key loading
 console.log('Loaded Secret Key:', process.env.PAYSTACK_SECRET_KEY ? 'Key Found' : 'Key Missing');
 console.log('Loaded Frontend URL:', process.env.FRONTEND_URL ? process.env.FRONTEND_URL : 'MISSING');
 console.log('Loaded Backend URL:', process.env.BACKEND_URL ? process.env.BACKEND_URL : 'MISSING');
@@ -19,7 +19,6 @@ const port = process.env.PORT || 3000;
 // CORS Configuration
 const corsOptions = {
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps, Postman, or file://)
         if (!origin) return callback(null, true);
 
         const allowedOrigins = [
@@ -27,7 +26,7 @@ const corsOptions = {
             'http://127.0.0.1:8000',
             'http://0.0.0.0:8000',
             process.env.FRONTEND_URL
-        ].filter(Boolean); // Remove any undefined values
+        ].filter(Boolean);
 
         if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
@@ -44,13 +43,10 @@ const corsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 
-// ⚠️ IMPORTANT: For webhooks, you need a different body parser setup.
-// We'll use express.json() for all *other* routes, but use raw body for the webhook.
-
 // Middleware to parse JSON for all routes EXCEPT the webhook
 app.use((req, res, next) => {
     if (req.originalUrl === '/payments/webhook') {
-        next(); // Skip JSON parsing for webhook route
+        next();
     } else {
         express.json()(req, res, next);
     }
@@ -62,8 +58,7 @@ app.options('/payments/initialize', (req, res) => {
 
 // --- Routes ---
 
-// 1. PAYMENT INITIALIZATION (Callback URL Logic is set here)
-// The Paystack endpoint to start a payment
+// 1. PAYMENT INITIALIZATION
 app.post('/payments/initialize', async (req, res) => {
     try {
         console.log('--- Frontend Payload Received ---');
@@ -83,18 +78,18 @@ app.post('/payments/initialize', async (req, res) => {
         // 2. Create transaction reference
         const reference = `ROYAL_SCHOLARS_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // 3. Construct the full metadata object
+        // 3. Construct the full metadata object with USD amount
         const fullMetadata = {
             custom_fields: [
                 {
                     display_name: "First Name",
                     variable_name: "first_name",
-                    value: firstName
+                    value: firstName || ''
                 },
                 {
                     display_name: "Last Name",
                     variable_name: "last_name",
-                    value: lastName
+                    value: lastName || ''
                 },
                 {
                     display_name: "Phone",
@@ -105,8 +100,15 @@ app.post('/payments/initialize', async (req, res) => {
                     display_name: "Donation Type",
                     variable_name: "donation_type",
                     value: frequency
+                },
+                {
+                    display_name: "Original Amount USD",
+                    variable_name: "original_amount_usd",
+                    value: metadata?.originalAmountUSD || 0
                 }
             ],
+            // Store USD amount at the root level too for easy access
+            originalAmountUSD: metadata?.originalAmountUSD || 0,
             ...metadata
         };
 
@@ -116,13 +118,8 @@ app.post('/payments/initialize', async (req, res) => {
             email: email,
             reference: reference,
             currency: 'NGN',
-            // 💡 CALLBACK URL: Where Paystack redirects the USER (browser)
             callback_url: `${process.env.FRONTEND_URL}`, 
             metadata: JSON.stringify(fullMetadata)
-            // Note: Paystack webhooks are configured globally on the dashboard,
-            // but for security, some developers prefer to use the channel metadata 
-            // for the webhook URL to pass it on initialization. Paystack does 
-            // not support setting the primary webhook URL via the initialize API call.
         };
 
         console.log('--- Final Paystack Payload ---');
@@ -140,7 +137,7 @@ app.post('/payments/initialize', async (req, res) => {
                     'Authorization': `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 10000 // 10 second timeout
+                timeout: 10000
             }
         );
 
@@ -151,16 +148,16 @@ app.post('/payments/initialize', async (req, res) => {
 
         // Check if Paystack API call was successful
         if (paystackResponse.data.status === true) {
-            // 5. Store transaction in database
+            // 5. Store transaction in database - names go in dedicated columns, USD in metadata
             const transactionData = {
                 reference: reference,
                 amount: amount,
                 email: email,
-                firstName: firstName,
-                lastName: lastName,
-                phone: phone,
+                firstName: firstName || '',
+                lastName: lastName || '',
+                phone: phone || '',
                 donationType: frequency,
-                metadata: fullMetadata,
+                metadata: fullMetadata, // This includes originalAmountUSD
                 status: 'initiated'
             };
 
@@ -217,21 +214,17 @@ app.post('/payments/initialize', async (req, res) => {
     }
 });
 
-// 2. WEBHOOK LISTENER (The RELIABLE Server-to-Server method)
-// ⚠️ Set this endpoint as your Webhook URL in your Paystack Dashboard settings.
+// 2. WEBHOOK LISTENER
 app.post('/payments/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-    // 1. Verify the signature for security
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const hash = crypto.createHmac('sha512', secret).update(req.body).digest('hex');
     const paystackSignature = req.headers['x-paystack-signature'];
 
     if (hash !== paystackSignature) {
-        // Reject the request if the signature is invalid
         console.error('Webhook signature failed verification!');
         return res.status(401).send('Invalid Signature');
     }
 
-    // 2. Parse the body now that it's authenticated
     const event = JSON.parse(req.body.toString());
     const eventData = event.data;
     const reference = eventData.reference;
@@ -243,64 +236,114 @@ app.post('/payments/webhook', express.raw({ type: 'application/json' }), async (
 
     try {
         if (event.event === 'charge.success') {
-            // 3. Optional: Verify the transaction again using Paystack API (Best Practice)
-            // You should still verify in a live environment to prevent fraud/manipulation
-            // However, for simplicity and acknowledging a reliable webhook, we can update directly.
-            // NOTE: The `eventData` here is already verified by Paystack before sending.
-
-            // 4. Check if we've already processed this transaction (Idempotency)
+            // Check if we've already processed this transaction
             const currentTransaction = await database.getTransaction(reference);
             if (currentTransaction && currentTransaction.status === 'completed') {
                 console.log(`Transaction ${reference} already completed. Ignoring webhook.`);
-                // Send 200 OK anyway so Paystack stops retrying
                 return res.sendStatus(200);
             }
 
             if (eventData.status === 'success') {
-                // 5. Update transaction and fulfill service/product
+                // Extract name and USD amount from webhook metadata
+                let firstName = '';
+                let lastName = '';
+                let originalAmountUSD = 0;
+
+                // Try to get name from webhook metadata first
+                if (eventData.metadata) {
+                    let metadata;
+                    try {
+                        // Handle both string and object metadata
+                        metadata = typeof eventData.metadata === 'string' 
+                            ? JSON.parse(eventData.metadata) 
+                            : eventData.metadata;
+                        
+                        if (metadata.custom_fields) {
+                            const customFields = metadata.custom_fields;
+                            const firstNameField = customFields.find(field => field.variable_name === 'first_name');
+                            const lastNameField = customFields.find(field => field.variable_name === 'last_name');
+                            const usdAmountField = customFields.find(field => field.variable_name === 'original_amount_usd');
+                            
+                            firstName = firstNameField?.value || '';
+                            lastName = lastNameField?.value || '';
+                            originalAmountUSD = usdAmountField?.value || 0;
+                        }
+                        
+                        // Also check direct metadata properties
+                        if (!originalAmountUSD && metadata.originalAmountUSD) {
+                            originalAmountUSD = metadata.originalAmountUSD;
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing metadata:', parseError.message);
+                    }
+                }
+
+                // If names not found in webhook, use existing transaction data
+                if ((!firstName && !lastName) && currentTransaction) {
+                    firstName = currentTransaction.first_name || '';
+                    lastName = currentTransaction.last_name || '';
+                }
+
+                // If USD amount not found, try to get from existing transaction metadata
+                if (!originalAmountUSD && currentTransaction && currentTransaction.metadata) {
+                    try {
+                        const existingMetadata = typeof currentTransaction.metadata === 'string' 
+                            ? JSON.parse(currentTransaction.metadata) 
+                            : currentTransaction.metadata;
+                        originalAmountUSD = existingMetadata.originalAmountUSD || 0;
+                    } catch (e) {
+                        console.error('Error parsing existing metadata:', e.message);
+                    }
+                }
+
+                // Prepare metadata with USD amount for storage
+                let updatedMetadata = {};
+                if (currentTransaction && currentTransaction.metadata) {
+                    try {
+                        updatedMetadata = typeof currentTransaction.metadata === 'string' 
+                            ? JSON.parse(currentTransaction.metadata) 
+                            : currentTransaction.metadata;
+                    } catch (e) {
+                        console.error('Error parsing current metadata:', e.message);
+                    }
+                }
+                
+                // Ensure USD amount is preserved in metadata
+                updatedMetadata.originalAmountUSD = originalAmountUSD;
+
+                // Update transaction
                 await database.updateTransaction(reference, {
                     status: 'completed',
-                    verified_at: new Date().toISOString()
+                    verified_at: new Date().toISOString(),
+                    metadata: JSON.stringify(updatedMetadata)
                 });
 
                 // Get full transaction details for notification
                 const transaction = await database.getTransaction(reference);
 
-                // 6. Notify admin about completed payment (THE RELIABLE FULFILLMENT POINT)
+                // Notify admin about completed payment with all details
                 if (transaction) {
                     await notificationService.notifyAdmin(transaction, 'completed (via Webhook)');
                 }
-                
-                // You would typically handle sending the user's order confirmation email/SMS here
             } else {
-                 // Handle other non-success charge states if necessary
                  console.log(`Charge not successful. Status: ${eventData.status}`);
                  await database.updateTransaction(reference, { status: eventData.status });
             }
 
         } else if (event.event === 'transfer.success') {
-            // Handle transfer status updates
             console.log(`Transfer successful: ${reference}`);
         }
-        // ... handle other important events like 'subscription.create', 'invoice.update', etc.
 
-        // 7. Acknowledge receipt to Paystack
         res.sendStatus(200);
 
     } catch (dbError) {
         console.error('Database error during webhook processing:', dbError.message);
-        // Do NOT send a 200 OK. Paystack will retry if we fail.
         res.status(500).send('Server Error Processing Webhook');
     }
 });
 
-
-// 3. VERIFICATION ENDPOINT (Callback URL method - Frontend calls this)
-// Frontend redirects with reference, then calls this endpoint to verify
+// 3. VERIFICATION ENDPOINT
 app.get('/payments/verify/:reference', async (req, res) => {
-    // This logic is mostly for the Callback URL flow where the frontend needs to confirm status.
-    // In a production environment, this primarily provides the final status to the frontend.
-    // The Webhook is the source of truth for value fulfillment.
     try {
         const { reference } = req.params;
 
@@ -308,7 +351,6 @@ app.get('/payments/verify/:reference', async (req, res) => {
         console.log('Reference:', reference);
         console.log('------------------------------');
 
-        // Verify payment with Paystack using direct API call
         const verificationResponse = await axios.get(
             `https://api.paystack.co/transaction/verify/${reference}`,
             {
@@ -328,22 +370,64 @@ app.get('/payments/verify/:reference', async (req, res) => {
         const transactionData = verificationResponse.data.data;
         const paymentStatus = transactionData.status;
 
-        // Retrieve the transaction from your DB to check its status (which Webhook may have already updated)
         const currentTransaction = await database.getTransaction(reference);
         const dbStatus = currentTransaction ? currentTransaction.status : 'not_found';
         
-        // Only update the DB if the webhook hasn't done so, OR if the status is better.
         if (verificationResponse.data.status && paymentStatus === 'success' && dbStatus !== 'completed') {
-            // Update transaction in database
+            // Extract name and USD amount from verification response metadata
+            let firstName = '';
+            let lastName = '';
+            let originalAmountUSD = 0;
+
+            if (transactionData.metadata) {
+                let metadata;
+                try {
+                    metadata = typeof transactionData.metadata === 'string' 
+                        ? JSON.parse(transactionData.metadata) 
+                        : transactionData.metadata;
+                    
+                    if (metadata.custom_fields) {
+                        const customFields = metadata.custom_fields;
+                        const firstNameField = customFields.find(field => field.variable_name === 'first_name');
+                        const lastNameField = customFields.find(field => field.variable_name === 'last_name');
+                        const usdAmountField = customFields.find(field => field.variable_name === 'original_amount_usd');
+                        
+                        firstName = firstNameField?.value || '';
+                        lastName = lastNameField?.value || '';
+                        originalAmountUSD = usdAmountField?.value || 0;
+                    }
+                    
+                    if (!originalAmountUSD && metadata.originalAmountUSD) {
+                        originalAmountUSD = metadata.originalAmountUSD;
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing metadata in verification:', parseError.message);
+                }
+            }
+
+            // Prepare metadata with USD amount for storage
+            let updatedMetadata = {};
+            if (currentTransaction && currentTransaction.metadata) {
+                try {
+                    updatedMetadata = typeof currentTransaction.metadata === 'string' 
+                        ? JSON.parse(currentTransaction.metadata) 
+                        : currentTransaction.metadata;
+                } catch (e) {
+                    console.error('Error parsing current metadata in verification:', e.message);
+                }
+            }
+            
+            // Ensure USD amount is preserved in metadata
+            updatedMetadata.originalAmountUSD = originalAmountUSD;
+
             await database.updateTransaction(reference, {
                 status: 'completed',
-                verified_at: new Date().toISOString()
+                verified_at: new Date().toISOString(),
+                metadata: JSON.stringify(updatedMetadata)
             });
 
-            // Re-fetch the updated transaction for notification
             const transaction = await database.getTransaction(reference);
             
-            // Notify admin about completed payment (as a fallback/confirmation)
             if (transaction) {
                 await notificationService.notifyAdmin(transaction, 'completed (via Verification)');
             }
@@ -355,7 +439,6 @@ app.get('/payments/verify/:reference', async (req, res) => {
                 dbStatus: 'updated_via_verification'
             });
         } else if (dbStatus === 'completed') {
-             // Webhook already processed it - this is the ideal state
              res.json({
                 success: true,
                 message: 'Payment verified and already completed by webhook',
@@ -364,7 +447,6 @@ app.get('/payments/verify/:reference', async (req, res) => {
             });
         } 
         else {
-            // Update transaction status based on Paystack response (e.g., failed, abandoned)
             const statusMap = {
                 'failed': 'failed',
                 'abandoned': 'abandoned',
@@ -373,13 +455,12 @@ app.get('/payments/verify/:reference', async (req, res) => {
 
             const updateStatus = statusMap[paymentStatus] || 'failed';
             
-            if (dbStatus !== updateStatus) { // Prevent unnecessary updates
+            if (dbStatus !== updateStatus) {
                 await database.updateTransaction(reference, {
                     status: updateStatus
                 });
             }
 
-            // Get transaction for notification
             const transaction = await database.getTransaction(reference);
             if (transaction && transaction.status === updateStatus) {
                 await notificationService.notifyAdmin(transaction, updateStatus + ' (via Verification)');
@@ -420,7 +501,6 @@ app.get('/payments/verify/:reference', async (req, res) => {
     }
 });
 
-
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({
@@ -440,7 +520,7 @@ app.get('/', (req, res) => {
         endpoints: {
             initialize: 'POST /payments/initialize',
             verify: 'GET /payments/verify/:reference',
-            webhook: 'POST /payments/webhook', // Highlight the new endpoint
+            webhook: 'POST /payments/webhook',
             health: 'GET /health',
         }
     });
