@@ -98,7 +98,7 @@ jobs:
             PORT=3000
             PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             ADMIN_PHONE=${{ secrets.ADMIN_PHONE }}
-            FRONTEND_URL=https://royalscholars.thekingstutor.com
+            FRONTEND_URL=https://royalscholarsfoundation.org
             BACKEND_URL=https://api.thekingstutor.com
             ENVFILE
             
